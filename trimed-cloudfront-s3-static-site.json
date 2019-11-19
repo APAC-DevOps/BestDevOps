@@ -1,0 +1,222 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+
+    "Description": "Sydney's No 1 DevOps is Jianhua",
+
+    "Parameters": {
+
+        "ExtDomain": {
+            "Description": "External Domain portion of the hostname for the instances.",
+            "Type": "String",
+            "Default": ".jianhua.devops"
+        },
+
+        "Env": {
+            "Description": "the environment name of your application",
+            "Type": "String"
+        },
+
+        "AcmCertificateArn": {
+            "Description": "ARN of the ACM Certificate to use in Cloudfront",
+            "Type": "String",
+            "Default": "none"
+        },
+
+        "RefId": {
+            "Description": "a reference ID of your cloud resource",
+            "Type": "String"
+        }
+
+    },
+
+    "Conditions": {
+        "ProdEnv": { "Fn::Equals": [ { "Ref": "Env" }, "prod" ] },
+        "NoRefId": { "Fn::Equals": [ { "Ref": "RefId" }, "" ] }
+        },
+
+    "Mappings": {
+        "Region": {
+            "us-east-1": {
+        "RegionName": "virginia",
+              "AvailabilityZone1": "us-east-1a",
+              "AvailabilityZone2": "us-east-1b",
+              "S3Endpoint": "s3.amazonaws.com"
+            },
+
+            "us-west-1": {
+              "RegionName": "california",
+              "AvailabilityZone1": "us-west-1a",
+              "AvailabilityZone2": "us-west-1b",
+              "S3Endpoint": "s3.amazonaws.com"
+            },
+
+            "us-west-2": {
+              "RegionName": "oregon",
+              "AvailabilityZone1": "us-west-2a",
+              "AvailabilityZone2": "us-west-2b",
+              "S3Endpoint": "s3.amazonaws.com"
+            },
+
+            "eu-west-1": {
+              "RegionName": "ireland",
+              "AvailabilityZone1": "eu-west-1a",
+              "AvailabilityZone2": "eu-west-1b",
+              "S3Endpoint": "s3-eu-west-1.amazonaws.com"
+            },
+
+            "eu-central-1": {
+              "RegionName": "frankfurt",
+              "AvailabilityZone1": "eu-central-1a",
+              "AvailabilityZone2": "eu-central-1b",
+              "S3Endpoint": "s3-eu-central-1.amazonaws.com"
+            },
+
+            "ap-northeast-1": {
+              "RegionName": "tokyo",
+              "AvailabilityZone1": "ap-northeast-1a",
+              "AvailabilityZone2": "ap-northeast-1c",
+              "S3Endpoint": "s3-ap-northeast-1.amazonaws.com"
+            },
+
+            "ap-southeast-1": {
+              "RegionName": "singapore",
+              "AvailabilityZone1": "ap-southeast-1a",
+              "AvailabilityZone2": "ap-southeast-1b",
+              "S3Endpoint": "s3-ap-southeast-1.amazonaws.com"
+            },
+
+            "ap-southeast-2": {
+              "RegionName": "sydney",
+              "AvailabilityZone1": "ap-southeast-2a",
+                "AvailabilityZone2": "ap-southeast-2b",
+                "AvailabilityZone3": "ap-southeast-2c",
+              "S3Endpoint": "s3-ap-southeast-2.amazonaws.com"
+            },
+
+            "sa-east-1": {
+              "RegionName": "brazil",
+              "AvailabilityZone1": "sa-east-1a",
+              "AvailabilityZone2": "sa-east-1b",
+              "S3Endpoint": "s3-sa-east-1.amazonaws.com"
+            }
+        },
+
+        "AdminWeb": {
+            "S3Bucket": {
+                "baseName": "jianhua-devops"
+                }
+        }
+    },
+
+    "Resources": {
+        "WebUiBucket": {
+            "Type" : "AWS::S3::Bucket",
+            "Properties" : {
+                "BucketEncryption" : {
+                    "ServerSideEncryptionConfiguration" : [ {
+                        "ServerSideEncryptionByDefault" : {
+                        "SSEAlgorithm" : "AES256"
+                        }
+                    } ]
+                },
+                "BucketName" : { "Fn::If": [ "ProdEnv", { "Fn::FindInMap": [ "AdminWeb", "S3Bucket", "baseName" ] }, { "Fn::If": [ "NoRefId", { "Fn::Join" : [ "-", [ { "Fn::FindInMap": [ "AdminWeb", "S3Bucket", "baseName" ] }, { "Ref" : "Env"}  ] ] }, { "Fn::Join" : [ "-", [ { "Fn::FindInMap": [ "AdminWeb", "S3Bucket", "baseName" ] }, { "Ref" : "Env"}, { "Ref" : "RefId" }  ] ] } ] } ] },
+                "PublicAccessBlockConfiguration" : {
+                    "BlockPublicAcls" : true,
+                    "BlockPublicPolicy" : true,
+                    "IgnorePublicAcls" : true,
+                    "RestrictPublicBuckets" : true
+                }
+            }
+        },
+
+        "CloudFrontOriginAccessIdentity": {
+            "Type": "AWS::CloudFront::CloudFrontOriginAccessIdentity",
+            "Properties": {
+                "CloudFrontOriginAccessIdentityConfig": {
+                    "Comment": { "Fn::Join": [ "", [ { "Ref": "WebUiBucket" }, ".s3.amazonaws.com" ] ] }
+                }
+            }
+        },
+
+        "WebUiBucketPolicy": {
+            "Type" : "AWS::S3::BucketPolicy",
+            "DependsOn": "CloudFrontOriginAccessIdentity",
+            "Properties" : {
+                "Bucket" : { "Ref": "WebUiBucket" },
+                "PolicyDocument": {
+                    "Statement":[{
+                        "Action":["s3:GetObject"],
+                        "Effect":"Allow",
+                        "Resource": { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "WebUiBucket" } , "/*" ]]},
+                        "Principal": { "CanonicalUser" : { "Fn::GetAtt" : [ "CloudFrontOriginAccessIdentity", "S3CanonicalUserId" ] } }
+                    }]
+                }
+            }
+        },
+
+        "Cloudfront": {
+            "Type": "AWS::CloudFront::Distribution",
+            "DependsOn": "CloudFrontOriginAccessIdentity",
+            "Properties": {
+                "DistributionConfig": {
+                "Comment" : { "Fn::If": [ "ProdEnv", { "Fn::Join": [ ".", [ "admin", { "Ref": "ExtDomain"} ] ] }, { "Fn::If": [ "NoRefId", { "Fn::Join": [ ".", [ "admin", { "Ref" : "Env" }, { "Ref": "ExtDomain"} ] ] }, { "Fn::Join": [ ".", [ { "Fn::Join": [ "-", [ "admin", { "Ref": "RefId" } ] ] }, { "Ref" : "Env" }, { "Ref": "ExtDomain"} ] ] } ] } ] },
+                "CustomErrorResponses": [
+                    {
+                    "ErrorCachingMinTTL": 300,
+                    "ErrorCode": 403,
+                    "ResponseCode": 200,
+                    "ResponsePagePath": "/index.html"
+                    },
+                    {
+                    "ErrorCachingMinTTL": 300,
+                    "ErrorCode": 404,
+                    "ResponseCode": 200,
+                    "ResponsePagePath": "/index.html"
+                    }
+                ],
+                "DefaultCacheBehavior" : {
+                    "AllowedMethods" : [ "GET", "HEAD" ],
+                    "Compress" : false,
+                    "DefaultTTL" : 86400,
+                    "ForwardedValues" : {
+                    "QueryString" : false
+                    },
+                    "MaxTTL" : 604800,
+                    "MinTTL" : 0,
+                    "SmoothStreaming" : false,
+                    "TargetOriginId" : { "Ref": "WebUiBucket" },
+                    "ViewerProtocolPolicy" : "redirect-to-https"
+                },
+                "DefaultRootObject" : "index.html",
+                "Enabled" : true,
+                "HttpVersion" : "http2",
+                "IPV6Enabled" : true,
+                "Origins" : [ {
+                    "DomainName" : { "Fn::GetAtt": [ "WebUiBucket", "DomainName" ] },
+                    "Id" : { "Ref": "WebUiBucket" },
+                    "S3OriginConfig" : {
+                    "OriginAccessIdentity" : { "Fn::Join": [ "", [ "origin-access-identity/cloudfront/", { "Ref": "CloudFrontOriginAccessIdentity" } ] ] }
+                    }
+                } ],
+                "PriceClass" : "PriceClass_All",
+                            "Restrictions": {
+                                "GeoRestriction": {
+                                    "Locations" : [ "AU", "NZ" ],
+                                    "RestrictionType" : "whitelist"
+                                }
+                            }
+                }
+            }
+        }
+
+    },
+
+    "Outputs": {
+        "DistributionId" : {
+            "Description" : "The Cloudfront Distribution ID",
+            "Value" : { "Ref" : "Cloudfront" }
+        }
+
+    }
+
+}
