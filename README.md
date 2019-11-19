@@ -10,7 +10,7 @@ Set up a website with CloudFront + S3 Bucket
 - basic AWS knowledge
 
 ## Environment Setup On Linux or Mac
-`type “aws configure” in your terminal`
+* type “aws configure” in your terminal
 `create a s3 bucket, and upload the file trimed-cloudfront-s3-static-site.json to the created s3 bucket`
 `copy the s3 bucket url from AWS web console, and replace the line 33 in the hire-jianhua.py`
 
